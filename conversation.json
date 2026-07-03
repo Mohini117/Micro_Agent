@@ -2,11 +2,11 @@
     {
         "role": "user",
         "content": "What does this medicine do?",
-        "timestamp": "2026-07-03 18:02:12.256768"
+        "timestamp": "2026-07-03 20:01:28.641912"
     },
     {
-        "role": "assistant",
-        "content": "It's for blood pressure.",
-        "timestamp": "2026-07-03 18:02:12.256768"
+        "role": "user",
+        "content": "TOOL_CALL: search_medicine_db(query=\"paracetamol\")",
+        "timestamp": "2026-07-03 20:01:28.641912"
     }
 ]

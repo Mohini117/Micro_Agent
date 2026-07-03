@@ -1,68 +1,186 @@
 # micro-agent
 
-A minimal agent-orchestration framework built **from scratch in pure Python** - no LangChain, no LangGraph, no Mastra, no external dependencies.
+A minimal agent-orchestration framework built from scratch in pure Python.
 
-## Why this exists
+This project rebuilds the core ideas behind agent frameworks such as LangGraph, LangChain, and Mastra without depending on them: structured messages, tool-call parsing, action routing, memory, deduplication, and JSON persistence.
 
-I use frameworks like LangGraph and Mastra in my other projects (see [MedTrace](#), [Multi-Agent Finance AI System](#)), but I wanted to actually understand what they're doing under the hood instead of just calling their APIs. So I'm rebuilding the core loop of an agent framework - message handling, tool registration, action routing, and output parsing - using nothing but the Python standard library.
+The goal is not to wrap an existing framework. The goal is to understand and implement the moving pieces of an agent loop directly.
 
-This is also a deliberate exercise in writing and defending code independently: every module below was built with a mentored, spec-first approach - I was given a specification and test cases, wrote the implementation myself, and debugged real bugs before moving forward.
+## What It Demonstrates
+
+- Object modeling for conversation turns and tool calls
+- Decorator-based tool registration
+- Regex parsing of `TOOL_CALL:` model-style output
+- `match` / `case` routing for agent actions
+- Closure-based in-memory conversation history
+- Set-based duplicate tool-call detection
+- JSON save/load for conversation persistence
+- A working command-line loop with conversation saving
+
+## Demo
+
+Run the CLI from the project root:
+
+```powershell
+python -m text.cli
+```
+
+Example session:
+
+```text
+PS D:\micro_agent> python -m text.cli
+> What does this medicine do?
+Final answer: What does this medicine do?
+> TOOL_CALL: search_medicine_db(query="paracetamol")
+Executing tool: search_medicine_db
+> exit
+Saving conversation... done.
+```
+
+At the current stage, the CLI can identify a tool-call instruction and route it to the correct action. Live LLM integration and real tool dispatch are planned next steps.
 
 ## Architecture
 
 ```text
 micro_agent/
-├── message.py          # Message & ToolCall classes - structured conversation turns
-├── registry.py         # @register_tool decorator - first-class functions as a tool catalog
-├── router.py           # match/case based routing of agent decisions
-├── parser.py           # Regex-based extraction of tool calls from raw LLM text
-├── memory.py           # (planned) closure-based conversation memory
-├── dedupe.py           # (planned) set-based tool-call deduplication
-├── persistence.py      # (planned) JSON file save/load for conversation history
-└── cli.py              # (planned) entrypoint
+|-- message.py                 # Message and ToolCall domain objects
+|-- registry.py                # @register_tool decorator and tool catalog
+|-- decorators_lite/
+|   |-- parser.py              # Parses TOOL_CALL text into structured data
+|   `-- router.py              # Routes parsed actions with match/case
+|-- text/
+|   |-- cli.py                 # Interactive CLI loop
+|   |-- memory.py              # Closure-based conversation memory
+|   |-- dedupe.py              # Duplicate tool-call detection
+|   `-- persistence.py         # JSON save/load for conversation history
+|-- conversation.json          # Saved CLI conversation history
+`-- main.py                    # Local smoke-test script
 ```
 
-## Progress
+## Core Modules
 
-### Module 1 - `Message` and `ToolCall` classes (`message.py`)
+### 1. Messages and Tool Calls
 
-Models a conversation turn (`Message`) and a tool invocation request (`ToolCall`) as real objects instead of loose dicts.
+`message.py` defines two core objects:
 
-- `Message(role, content)` auto-generates a fresh `timestamp` on creation.
-- `ToolCall(tool_name, arguments)` auto-generates a unique `call_id` (UUID4) per instance.
-- Implements `__str__`, `__repr__`, and a type-safe `__eq__`.
-- Two `ToolCall`s are equal if `tool_name` and `arguments` match. `call_id` is intentionally excluded from equality.
+- `Message(role, content, timestamp=None)` stores one conversation turn and creates a fresh timestamp per message.
+- `ToolCall(tool_name, arguments, call_id=None)` stores a tool request and creates a unique UUID call id.
 
-**Bugs caught and fixed during development:**
+Important implementation detail: `ToolCall.__eq__` compares `tool_name` and `arguments`, but intentionally ignores `call_id`. That allows the deduplication layer to detect repeated calls even when each call has a unique id.
 
-- Mutable/stale default argument trap: `timestamp=datetime.datetime.now()` in a function signature evaluates once, at function definition time, not per call. Fixed by using `timestamp=None` and computing the real value inside the function body.
-- Unsafe `__eq__`: comparing `other.tool_name` before checking `isinstance(other, ToolCall)` crashes on `AttributeError` if compared against a non-`ToolCall`. Fixed by guarding with `isinstance` first.
+### 2. Tool Registry
 
-### Module 2 - Tool Registry (`registry.py`)
+`registry.py` implements a small `@register_tool` decorator. Registered functions are stored in the shared `TOOLS` dictionary by function name, which is the same basic pattern larger agent systems use when they expose tools to a model.
 
-A `@register_tool` decorator that catalogs any function into a shared `TOOLS` dict, keyed by function name, so agent code can look up and call tools dynamically by name rather than hardcoding references.
+Example tools currently included:
 
-Also explored decorator behavior more broadly:
+- `search_medicine_db(query)`
+- `get_weather(city)`
 
-- A registry-style decorator returns the original function unchanged and records it as a side effect.
-- A wrapping-style decorator (`log_call`) builds a new function around the original to add behavior, generalized with `*args, **kwargs` to work on any function signature.
+### 3. Output Parser
 
-### Module 3 - Action Router (`router.py`)
+`decorators_lite/parser.py` extracts a structured tool call from text like:
 
-`route_action(action)` uses Python 3.10+ `match`/`case` to route a parsed agent decision (`tool_call`, `final_answer`, `error`, or unrecognized) to the correct handling string, with a `case _:` wildcard to guarantee unrecognized action types are surfaced explicitly rather than silently returning `None`.
+```text
+TOOL_CALL: search_medicine_db(query="paracetamol")
+```
 
-### Module 4 - Output Parser (`parser.py`) - in progress
+It returns:
 
-`parse_tool_call(text)` uses regex with capture groups to extract a structured tool call from raw LLM text formatted as `TOOL_CALL: tool_name(arg="value")`, returning `None` if no tool call is present. Currently supports single-argument tool calls; multi-argument parsing is a planned extension.
+```python
+{
+    "tool_name": "search_medicine_db",
+    "arguments": {"query": "paracetamol"}
+}
+```
 
-## Planned modules
+If the text is not a tool call, it returns `None`, allowing the CLI to treat the input as a final answer.
 
-- Closure-based memory: conversation memory built as a closure (`add_message`/`get_history` functions) instead of a class.
-- Set-based deduplication: skip redundant tool calls with identical `tool_name` + `arguments` within a loop.
-- JSON persistence: save/resume conversation history via `json.dump`/`json.load`.
-- CLI entrypoint: tie everything together with `argparse`.
-- Real LLM integration: wire in a live model call so the loop is end-to-end.
+### 4. Action Router
 
-## Method
+`decorators_lite/router.py` uses Python `match` / `case` to route actions:
 
-Every module here was built spec-first: given a requirement and expected input/output, write the implementation independently, run it, and debug real failures before moving to the next piece. This is intentional: the goal is not just a working demo, it is closing the gap between using AI tools to build projects and being able to write and defend production code independently.
+- `tool_call` -> execute or prepare a tool call
+- `final_answer` -> return final response text
+- `error` -> surface parser or runtime errors
+- unknown action -> return an explicit fallback message
+
+### 5. Memory
+
+`text/memory.py` implements memory with a closure instead of a class:
+
+- `add_message(message)` appends to the hidden history list
+- `get_history()` returns the stored messages
+
+This demonstrates Python's enclosing-scope behavior and keeps state private without global variables.
+
+### 6. Deduplication
+
+`text/dedupe.py` converts a `ToolCall` into a hashable key:
+
+```python
+(tool_name, frozenset(arguments.items()))
+```
+
+That makes it possible to store previous calls in a `set` and skip repeated calls with the same tool name and arguments.
+
+### 7. Persistence
+
+`text/persistence.py` saves and loads conversation history as JSON. Because `datetime` objects are not directly JSON-serializable, each `Message` is converted to a plain dictionary on save and reconstructed on load.
+
+### 8. CLI
+
+`text/cli.py` ties the modules together:
+
+1. Reads user input.
+2. Stores each user message in memory.
+3. Parses tool-call syntax if present.
+4. Routes the action.
+5. Saves the conversation to `conversation.json` on `exit`.
+
+## Requirements
+
+- Python 3.10 or newer
+- No external Python packages required
+
+## Run Locally
+
+```powershell
+git clone https://github.com/Mohini117/Micro_Agent.git
+cd Micro_Agent
+python -m text.cli
+```
+
+Useful module checks:
+
+```powershell
+python main.py
+python registry.py
+python -m text.memory
+python -m text.persistence
+python -m text.dedupe
+```
+
+## Development Notes
+
+This project was built module by module with a spec-first approach: implement the smallest piece, run it, debug the real failure, then connect it to the next layer.
+
+Notable bugs fixed during development:
+
+- Avoided stale timestamps by using `timestamp=None` instead of `datetime.now()` as a default argument.
+- Made `ToolCall.__eq__` type-safe before accessing attributes on `other`.
+- Corrected parser output so it returns stable keys: `tool_name` and `arguments`.
+- Moved demo-only code behind `if __name__ == "__main__"` guards so imports stay clean.
+- Removed duplicate JSON writes from persistence.
+
+## Next Steps
+
+- Add multi-argument tool-call parsing.
+- Dispatch parsed tool calls through the registered `TOOLS` catalog.
+- Add an LLM call so the CLI can receive model-generated `TOOL_CALL:` output.
+- Add tests for parser, router, memory, dedupe, and persistence.
+- Add CLI flags such as `--load conversation.json` to resume a previous session.
+
+## Why This Project Matters
+
+This repository shows the internals behind a simple agent system rather than hiding them inside a framework. It is small enough to read end to end, but it covers the concepts that matter in larger AI applications: structured state, tool selection, parsing, routing, memory, persistence, and clean module boundaries.
