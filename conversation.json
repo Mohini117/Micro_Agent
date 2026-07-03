@@ -1,0 +1,12 @@
+[
+    {
+        "role": "user",
+        "content": "What does this medicine do?",
+        "timestamp": "2026-07-03 18:02:12.256768"
+    },
+    {
+        "role": "assistant",
+        "content": "It's for blood pressure.",
+        "timestamp": "2026-07-03 18:02:12.256768"
+    }
+]
