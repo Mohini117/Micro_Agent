@@ -2,11 +2,26 @@
     {
         "role": "user",
         "content": "What does this medicine do?",
-        "timestamp": "2026-07-03 20:01:28.641912"
+        "timestamp": "2026-07-05 09:40:13.212059"
     },
     {
         "role": "user",
         "content": "TOOL_CALL: search_medicine_db(query=\"paracetamol\")",
-        "timestamp": "2026-07-03 20:01:28.641912"
+        "timestamp": "2026-07-05 09:40:25.934683"
+    },
+    {
+        "role": "user",
+        "content": "TOOL_CALL: get_weather(city=\"New York\")",
+        "timestamp": "2026-07-05 09:40:37.501069"
+    },
+    {
+        "role": "user",
+        "content": "TOOL_CALL: search_medicine_db(query=\"paracetamol\"",
+        "timestamp": "2026-07-05 09:40:54.522578"
+    },
+    {
+        "role": "user",
+        "content": "TOOL_CALL: search_medicine_db(query=\"paracetamol\")",
+        "timestamp": "2026-07-05 09:41:09.306958"
     }
 ]
