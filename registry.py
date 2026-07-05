@@ -12,8 +12,8 @@ def search_medicine_db(query):
 
 
 @register_tool
-def get_weather(city):
-    return f"Weather in {city}"
+def get_weather(city, unit="celsius"):
+    return f"Weather in {city} ({unit})"
 
 
 if __name__ == "__main__":

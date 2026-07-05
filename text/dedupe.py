@@ -1,13 +1,16 @@
-from message import ToolCall
+from message import ToolCall, make_hashable
 
 
-def make_hashable(tool_call):
-    return (tool_call.tool_name, frozenset(tool_call.arguments.items()))
+def make_call_key(tool_call):
+    return (tool_call.tool_name, make_hashable(tool_call.arguments))
 
 
 def is_duplicate_call(tool_call, seen_calls):
-    hashable = make_hashable(tool_call)
-    return hashable in seen_calls
+    return make_call_key(tool_call) in seen_calls
+
+
+def remember_call(tool_call, seen_calls):
+    seen_calls.add(make_call_key(tool_call))
 
 
 if __name__ == "__main__":
@@ -18,7 +21,7 @@ if __name__ == "__main__":
     tc3 = ToolCall("search_medicine_db", {"query": "ibuprofen"})
 
     print(is_duplicate_call(tc1, seen_calls))
-    seen_calls.add(make_hashable(tc1))
+    remember_call(tc1, seen_calls)
     print(seen_calls)
     print(is_duplicate_call(tc2, seen_calls))
     print(is_duplicate_call(tc3, seen_calls))
